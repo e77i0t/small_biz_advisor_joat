@@ -54,4 +54,4 @@ All development and testing is done using Docker containers. Do not run code dir
 - Dockerized development
 
 ---
-For more details, see the project documentation and code comments. 
+For more details, see the project documentation and code comments.
