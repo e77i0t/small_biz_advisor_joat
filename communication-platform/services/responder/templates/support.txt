@@ -1,0 +1,1 @@
+We received your support request, {customer_name}. A team member from {business_name} will help you resolve this issue promptly. 

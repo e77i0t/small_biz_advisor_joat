@@ -1,0 +1,1 @@
+# Init for tests in Classifier Agent service 

@@ -1,0 +1,248 @@
+version: '3.9'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - '5672:5672'   # AMQP
+      - '15672:15672' # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: dev
+      RABBITMQ_DEFAULT_PASS: dev123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - comms_net
+
+  postgres:
+    image: postgres:15
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: comms_platform
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - comms_net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - comms_net
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - '5050:80'
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@dev.local
+      PGADMIN_DEFAULT_PASSWORD: dev123
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/misc/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Example microservice (repeat for each service)
+  twilio-monitor:
+    build:
+      context: ./services/twilio-monitor
+      dockerfile: Dockerfile.dev
+    container_name: twilio-monitor-dev
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=postgresql://dev:dev123@postgres:5432/comms_platform
+      - RABBITMQ_URL=amqp://dev:dev123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./services/twilio-monitor:/app
+      - ./shared:/app/shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - comms_net
+
+  conversation-grouper:
+    build:
+      context: ./services/conversation-grouper
+      dockerfile: Dockerfile.dev
+    container_name: conversation-grouper-dev
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=postgresql://dev:dev123@postgres:5432/comms_platform
+      - RABBITMQ_URL=amqp://dev:dev123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./services/conversation-grouper:/app
+      - ./shared:/app/shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - comms_net
+
+  classifier-agent:
+    build:
+      context: ./services/classifier-agent
+      dockerfile: Dockerfile.dev
+    container_name: classifier-agent-dev
+    ports:
+      - "8003:8000"
+    environment:
+      - DATABASE_URL=postgresql://dev:dev123@postgres:5432/comms_platform
+      - RABBITMQ_URL=amqp://dev:dev123@rabbitmq:5672/
+      - LOG_LEVEL=DEBUG
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./services/classifier-agent:/app
+      - ./shared:/app/shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - comms_net
+
+  spam-detector:
+    build:
+      context: ./communication-platform/services/spam-detector
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8004:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  responder:
+    build:
+      context: ./communication-platform/services/responder
+      dockerfile: Dockerfile.dev
+    container_name: responder-dev
+    ports:
+      - "8005:8000"
+    environment:
+      - DATABASE_URL=postgresql://dev:dev123@postgres:5432/comms_platform
+      - RABBITMQ_URL=amqp://dev:dev123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=DEBUG
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+    volumes:
+      - ./communication-platform/services/responder:/app
+      - ./communication-platform/shared:/app/shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - comms_net
+
+  customer-manager:
+    build:
+      context: ./services/customer-manager
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/customer-manager:/app
+    env_file:
+      - ./services/customer-manager/.env
+    depends_on:
+      - rabbitmq
+      - postgres
+      - redis
+    networks:
+      - comms_net
+    ports:
+      - '8006:8000'
+
+  reporting:
+    build:
+      context: ./services/reporting
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/reporting:/app
+    env_file:
+      - ./services/reporting/.env
+    depends_on:
+      - rabbitmq
+      - postgres
+      - redis
+    networks:
+      - comms_net
+    ports:
+      - '8007:8000'
+
+  archive-scanner:
+    build:
+      context: ./services/archive-scanner
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/archive-scanner:/app
+    env_file:
+      - ./services/archive-scanner/.env
+    depends_on:
+      - rabbitmq
+      - postgres
+      - redis
+    networks:
+      - comms_net
+    ports:
+      - '8008:8000'
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  redis_data:
+  pgadmin_data:
+
+networks:
+  comms_net:
+    driver: bridge 

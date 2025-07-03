@@ -1,0 +1,1 @@
+Thank you for your interest, {customer_name}! Someone from our team at {business_name} will contact you within 24 hours to discuss your needs. 

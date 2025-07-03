@@ -1,0 +1,1 @@
+We received your quote request, {customer_name}. Our team at {business_name} will review your requirements and send you a detailed quote within 48 hours. 

@@ -1,0 +1,2 @@
+# Requirements for Classifier Agent service 
+openai 

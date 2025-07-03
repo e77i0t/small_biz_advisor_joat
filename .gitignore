@@ -1,0 +1,44 @@
+# Environment files
+.env*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+*.env
+*.venv
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# Test and coverage
+.coverage
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+
+# Logs
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+# Pyre type checker
+.pyre/ 
